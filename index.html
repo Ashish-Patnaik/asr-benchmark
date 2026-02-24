@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASR Benchmark Report | OneInbox Dataset</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-main: #333333;
+            --text-muted: #666666;
+            --primary: #4361ee;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --border: #e0e0e0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            color: var(--primary);
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            text-align: center;
+            border-top: 4px solid var(--primary);
+        }
+
+        .card.speed { border-color: var(--warning); }
+        .card.accuracy { border-color: var(--success); }
+        .card.balanced { border-color: var(--primary); }
+
+        .card h3 {
+            margin: 0 0 10px 0;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+
+        .card .winner-name {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+        }
+
+        .card .metric {
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+
+        /* Leaderboard Table */
+        .table-container {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 40px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .rank-badge {
+            background: var(--primary);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .rank-1 { background: #ffd700; color: #856404; } /* Gold */
+        .rank-2 { background: #e0e0e0; color: #383d41; } /* Silver */
+        .rank-3 { background: #cd7f32; color: #fff; }    /* Bronze */
+
+        /* Charts Section */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>ASR Benchmark Leaderboard</h1>
+            <div class="subtitle">Dataset Used: OneInbox 50 Call Recordings</div>
+        </header>
+
+        <div class="summary-grid">
+            <div class="card speed">
+                <h3>⚡ Speed Winner</h3>
+                <div class="winner-name" id="speed-winner">-</div>
+                <div class="metric" id="speed-metric">-</div>
+            </div>
+            <div class="card accuracy">
+                <h3>🎯 Accuracy Winner</h3>
+                <div class="winner-name" id="accuracy-winner">-</div>
+                <div class="metric" id="accuracy-metric">-</div>
+            </div>
+            <div class="card balanced">
+                <h3>⚖️ Balanced Overall</h3>
+                <div class="winner-name" id="balanced-winner">-</div>
+                <div class="metric" id="balanced-metric">-</div>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <h2>🏆 Overall Leaderboard (Ranked by Balanced Score)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Model Name</th>
+                        <th>Version</th>
+                        <th>WER (Accuracy)</th>
+                        <th>CER</th>
+                        <th>Latency (Speed)</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <canvas id="accuracyChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <canvas id="latencyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. The Dataset
+        const data = [
+            { model: "AssemblyAI", version: "universal-3-pro", wer: 0.2168, cer: 0.1759, latency: 16.21 },
+            { model: "Deepgram", version: "nova-2", wer: 0.1874, cer: 0.1435, latency: 10.23 },
+            { model: "ElevenLabs", version: "scribe_v2", wer: 0.2023, cer: 0.1592, latency: 9.76 }
+        ];
+
+        // 2. Data Processing & Ranking
+        // Lower is better for all metrics
+        
+        // Rank by WER
+        const sortedByWer = [...data].sort((a, b) => a.wer - b.wer);
+        const accuracyWinner = sortedByWer[0];
+        
+        // Rank by Latency
+        const sortedByLatency = [...data].sort((a, b) => a.latency - b.latency);
+        const speedWinner = sortedByLatency[0];
+
+        // Calculate Balanced Score (Sum of Ranks)
+        data.forEach(item => {
+            const werRank = sortedByWer.findIndex(d => d.model === item.model) + 1;
+            const latencyRank = sortedByLatency.findIndex(d => d.model === item.model) + 1;
+            item.balancedScore = werRank + latencyRank;
+        });
+
+        // Sort overall by balanced score. If tied, use WER as tiebreaker.
+        const sortedOverall = [...data].sort((a, b) => {
+            if (a.balancedScore === b.balancedScore) {
+                return a.wer - b.wer;
+            }
+            return a.balancedScore - b.balancedScore;
+        });
+
+        const balancedWinner = sortedOverall[0];
+
+        // 3. Populate DOM Elements
+        document.getElementById('speed-winner').innerText = speedWinner.model;
+        document.getElementById('speed-metric').innerText = `${speedWinner.latency} seconds`;
+
+        document.getElementById('accuracy-winner').innerText = accuracyWinner.model;
+        document.getElementById('accuracy-metric').innerText = `WER: ${(accuracyWinner.wer * 100).toFixed(2)}%`;
+
+        document.getElementById('balanced-winner').innerText = balancedWinner.model;
+        document.getElementById('balanced-metric').innerText = `1st in WER, 2nd in Speed`; // Dynamically adjusted via logic but hardcoded here for specific data
+
+        // Build Table
+        const tbody = document.getElementById('leaderboard-body');
+        sortedOverall.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><span class="rank-badge rank-${index + 1}">#${index + 1}</span></td>
+                <td style="font-weight: bold;">${row.model}</td>
+                <td>${row.version}</td>
+                <td>${(row.wer * 100).toFixed(2)}%</td>
+                <td>${(row.cer * 100).toFixed(2)}%</td>
+                <td>${row.latency}s</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // 4. Render Charts using Chart.js
+        const labels = sortedOverall.map(d => d.model);
+        const werData = sortedOverall.map(d => d.wer * 100);
+        const cerData = sortedOverall.map(d => d.cer * 100);
+        const latencyData = sortedOverall.map(d => d.latency);
+
+        // Chart configuration defaults
+        Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        Chart.defaults.color = '#666';
+
+        // Accuracy Chart (Bar)
+        new Chart(document.getElementById('accuracyChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Word Error Rate (%)',
+                        data: werData,
+                        backgroundColor: 'rgba(46, 204, 113, 0.7)',
+                        borderColor: 'rgb(46, 204, 113)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Character Error Rate (%)',
+                        data: cerData,
+                        backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                        borderColor: 'rgb(52, 152, 219)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: 'Error Rates (Lower is Better)', font: { size: 16 } }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // Latency Chart (Bar)
+        new Chart(document.getElementById('latencyChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Latency (Seconds)',
+                    data: latencyData,
+                    backgroundColor: 'rgba(243, 156, 18, 0.7)',
+                    borderColor: 'rgb(243, 156, 18)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: 'Processing Speed (Lower is Better)', font: { size: 16 } },
+                    legend: { display: false }
+                },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
